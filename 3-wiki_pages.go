@@ -30,8 +30,17 @@ func loadPage(title string) (*Page, error) {
 
 // this function calls the correct html template for the handlers
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
-    t, _ := template.ParseFiles(tmpl + ".html")
-    t.Execute(w, p)
+	// t is a template.Template
+    t, err := template.ParseFiles(tmpl + ".html")
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    // error during t.Execute will be reported to user
+    err = t.Execute(w, p)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+    }
 }
 
 // calls the title and body, and formats it in html to view the page
@@ -65,7 +74,12 @@ func saveHandler(w http.ResponseWriter, r *http.Request) {
     title := r.URL.Path[len("/save/"):]
     body := r.FormValue("body")
     p := &Page{Title: title, Body: []byte(body)}
-    p.save()
+    // errors that occur during p.save() will be reported to user
+    err := p.save()
+    if err != nil {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+    }
     http.Redirect(w, r, "/view/"+title, http.StatusFound)
 }
 
