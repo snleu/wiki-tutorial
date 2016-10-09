@@ -6,6 +6,10 @@ import (
 	"html/template"
 )
 
+// parses all templates
+// template.Must panics when passed a non-nil error value
+var templates = template.Must(template.ParseFiles("edit.html", "view.html"))
+
 // creates a page with title and body text
 type Page struct {
     Title string
@@ -30,14 +34,7 @@ func loadPage(title string) (*Page, error) {
 
 // this function calls the correct html template for the handlers
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
-	// t is a template.Template
-    t, err := template.ParseFiles(tmpl + ".html")
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
-    // error during t.Execute will be reported to user
-    err = t.Execute(w, p)
+    err := templates.ExecuteTemplate(w, tmpl+".html", p)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
     }
