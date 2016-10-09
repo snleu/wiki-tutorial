@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"html/template"
 	"regexp"
-	"errors"
 )
 
 // parses all templates
@@ -45,23 +44,21 @@ func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
     }
 }
 
-// this function checks that the title of a called page exists
-func getTitle(w http.ResponseWriter, r *http.Request) (string, error) {
-    m := validPath.FindStringSubmatch(r.URL.Path)
-    if m == nil {
-        http.NotFound(w, r)
-        return //"", errors.New("Invalid Page Title")
-    }
-    return m[2], nil // The title is the second subexpression.
+
+// wrapper that takes view/edit/save handler function and returns func http.HandlerFunc
+func makeHandler(fn func (http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		m := validPath.FindStringSubmatch(r.URL.Path)
+		if m == nil {
+			http.NotFound(w,r)
+			return
+		}
+		fn(w, r, m[2])
+	}
 }
 
 // calls the title and body, and formats it in html to view the page
-func viewHandler(w http.ResponseWriter, r *http.Request) {
-	// the title of the page is from the url path excluding "/view/"
-    title, err := getTitle(w, r)
-    if err != nil {
-    	return
-    }
+func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
     p, err := loadPage(title)
     // if the page called does not exist, there is a redirect to the /edit page
     if err != nil {
@@ -73,11 +70,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // edits the body of a page, formatted in html
-func editHandler(w http.ResponseWriter, r *http.Request) {
-    title, err := getTitle(w, r)
-    if err != nil {
-    	return
-    }
+func editHandler(w http.ResponseWriter, r *http.Request, title string) {
     p, err := loadPage(title)
     // error != nil if the page does not exist
     if err != nil {
@@ -88,15 +81,11 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // saves edits made to a page and redirects to /view/ page
-func saveHandler(w http.ResponseWriter, r *http.Request) {
-    title, err := getTitle(w, r)
-    if err != nil {
-    	return
-    }
+func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
     body := r.FormValue("body")
     p := &Page{Title: title, Body: []byte(body)}
     // errors that occur during p.save() will be reported to user
-    err = p.save()
+    err := p.save()
     if err != nil {
     	http.Error(w, err.Error(), http.StatusInternalServerError)
     	return
@@ -105,8 +94,8 @@ func saveHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/view/", viewHandler)
-	http.HandleFunc("/edit/", editHandler)
-    http.HandleFunc("/save/", saveHandler)
+	http.HandleFunc("/view/", makeHandler(viewHandler))
+	http.HandleFunc("/edit/", makeHandler(editHandler))
+    http.HandleFunc("/save/", makeHandler(saveHandler))
 	http.ListenAndServe(":8080", nil)
 }
