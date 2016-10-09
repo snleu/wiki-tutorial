@@ -34,6 +34,7 @@ func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
     t.Execute(w, p)
 }
 
+// calls the title and body, and formats it in html to view the page
 func viewHandler(w http.ResponseWriter, r *http.Request) {
 	// the title of the page is from the url path excluding "/view/"
     title := r.URL.Path[len("/view/"):]
@@ -47,6 +48,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
     renderTemplate(w, "view", p)
 }
 
+// edits the body of a page, formatted in html
 func editHandler(w http.ResponseWriter, r *http.Request) {
     title := r.URL.Path[len("/edit/"):]
     p, err := loadPage(title)
@@ -58,9 +60,18 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
     renderTemplate(w, "edit", p)
 }
 
+// saves edits made to a page and redirects to /view/ page
+func saveHandler(w http.ResponseWriter, r *http.Request) {
+    title := r.URL.Path[len("/save/"):]
+    body := r.FormValue("body")
+    p := &Page{Title: title, Body: []byte(body)}
+    p.save()
+    http.Redirect(w, r, "/view/"+title, http.StatusFound)
+}
+
 func main() {
 	http.HandleFunc("/view/", viewHandler)
 	http.HandleFunc("/edit/", editHandler)
-    //http.HandleFunc("/save/", saveHandler)
+    http.HandleFunc("/save/", saveHandler)
 	http.ListenAndServe(":8080", nil)
 }
