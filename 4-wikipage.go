@@ -1,11 +1,13 @@
 package main 
 
 import (
-    "io/ioutil"
+    _ "github.com/lib/pq"
+    "database/sql"
     "net/http"
     "html/template"
     "regexp"
     "log"
+    //"fmt"
 )
 
 // parses all templates
@@ -18,34 +20,20 @@ var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
 // creates a page with title and body text
 type Page struct {
     Title string
-    Body  []byte
+    Body  string
 }
 
-// // saves a new page as a txt file
-// func (p *Page) save() error {
-//     filename := p.Title + ".txt"
-//     return ioutil.WriteFile(filename, p.Body, 0600)
-// }
+// create a db and a table:
+// sudo su _postgres -c \ "psql -c \"CREATE ROLE mydatabase LOGIN password 'averysecurepassword'\";"
+// psql -d myDataBase -a -f myInsertFile.sql
+var db *sql.DB
 
-// // loads the page from its file with name title and throws an error if no page is found
-// func loadPage(title string) (*Page, error) {
-//     if err != nil {
-//         return nil, err
-//     }
-//     return &Page{Title: title, Body: body}, nil
-// }
-
-func loadPage(title string) (*Page, error) {
-    row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
-    pg := new(Page)
-    err := row.Scan(&pg.title, &pg.body)
+func init() {
+    var err error
+    db, err = sql.Open("postgres", "user=snleu dbname=Pages sslmode=disable")
     if err != nil {
-        ttp.Error(w, err.Error(), http.StatusInternalServerError)
-        return nil, err
-    if err == sql.ErrNoRows {
-        return nil, err
-    }
-    return pg, err
+        log.Fatal(err)
+  }
 }
 
 // this function calls the correct html template for the handlers
@@ -71,48 +59,47 @@ func makeHandler(fn func (http.ResponseWriter, *http.Request, string)) http.Hand
 
 // calls the title and body, and formats it in html to view the page
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
-    p, err := loadPage(title)
-
-    if err == sql.ErrNoRows {
+    row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
+    p := new(Page)
+    err := row.Scan(&p.Title, &p.Body)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+    } else if err == sql.ErrNoRows {
+        _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", p.Title, p.Body)
+        if err1 != nil {
+            http.Error(w, err1.Error(), http.StatusInternalServerError)
+        }
         http.Redirect(w, r, "/edit/"+title, http.StatusFound)
-        return
     }
     renderTemplate(w, "view", p)
 }
 
 // edits the body of a page, formatted in html
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
-    p, err := loadPage(title)
-    // error != nil if the page does not exist
-    if err == sql.ErrNoRows {
-        // if the page does not exist then it shows an edit page with the entered title and blank text
-        p = &Page{Title: title}
+    row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
+    p := new(Page)
+    err := row.Scan(&p.Title, &p.Body)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+    } else if err == sql.ErrNoRows {
+        _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", p.Title, p.Body)
+        if err1 != nil {
+            http.Error(w, err1.Error(), http.StatusInternalServerError)
+        }
     }
-
     renderTemplate(w, "edit", p)
 }
 
 // saves edits made to a page and redirects to /view/ page
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
     body := r.FormValue("body")
-    p := &Page{Title: title, Body: []byte(body)}
-    
-    // update page, query
-
+    p := &Page{Title: title, Body: body}
+    _, err := db.Exec("UPDATE pages SET body = $1 WHERE title = $2", p.Body, p.Title)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
     }
     http.Redirect(w, r, "/view/"+title, http.StatusFound)
 }
-
-// func init() {
-//     var err error
-//     db, err = sql.Open("postgres", "postgres://user:pass@localhost/bookstore")
-//     if err != nil {
-//         log.Fatal(err)
-//   }
-// }
 
 func main() {
     http.HandleFunc("/view/", makeHandler(viewHandler))
