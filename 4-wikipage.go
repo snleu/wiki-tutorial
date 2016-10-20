@@ -7,7 +7,8 @@ import (
     "html/template"
     "regexp"
     "log"
-    //"fmt"
+    "strings"
+    "fmt"
 )
 
 // parses all templates
@@ -62,14 +63,15 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
     row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
     p := new(Page)
     err := row.Scan(&p.Title, &p.Body)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-    } else if err == sql.ErrNoRows {
-        _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", p.Title, p.Body)
+    p.Title = strings.Trim(p.Title, " ")
+    if err == sql.ErrNoRows {
+        _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", title, "")
         if err1 != nil {
             http.Error(w, err1.Error(), http.StatusInternalServerError)
         }
         http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+    } else if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
     }
     renderTemplate(w, "view", p)
 }
@@ -79,13 +81,15 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
     row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
     p := new(Page)
     err := row.Scan(&p.Title, &p.Body)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-    } else if err == sql.ErrNoRows {
-        _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", p.Title, p.Body)
+    p.Title = strings.Trim(p.Title, " ")
+    if err == sql.ErrNoRows {
+        _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", title, "")
         if err1 != nil {
             http.Error(w, err1.Error(), http.StatusInternalServerError)
         }
+        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+    } else if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
     }
     renderTemplate(w, "edit", p)
 }
@@ -93,6 +97,7 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 // saves edits made to a page and redirects to /view/ page
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
     body := r.FormValue("body")
+    fmt.Printf("body: %v\n", body)
     p := &Page{Title: title, Body: body}
     _, err := db.Exec("UPDATE pages SET body = $1 WHERE title = $2", p.Body, p.Title)
     if err != nil {
