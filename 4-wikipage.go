@@ -8,7 +8,7 @@ import (
     "regexp"
     "log"
     "strings"
-    "fmt"
+    //"fmt"
 )
 
 // parses all templates
@@ -26,7 +26,7 @@ type Page struct {
 
 // create a db and a table:
 // sudo su _postgres -c \ "psql -c \"CREATE ROLE mydatabase LOGIN password 'averysecurepassword'\";"
-// psql -d myDataBase -a -f myInsertFile.sql
+// psql -d Pages -a -f 4-wikipage.sql
 var db *sql.DB
 
 func init() {
@@ -58,12 +58,17 @@ func makeHandler(fn func (http.ResponseWriter, *http.Request, string)) http.Hand
     }
 }
 
-// calls the title and body, and formats it in html to view the page
-func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
+func selectRow(title string) (*Page, error) {
     row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
     p := new(Page)
     err := row.Scan(&p.Title, &p.Body)
     p.Title = strings.Trim(p.Title, " ")
+    return p, err
+}
+
+// calls the title and body, and formats it in html to view the page
+func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
+    p, err := selectRow(title)
     if err == sql.ErrNoRows {
         _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", title, "")
         if err1 != nil {
@@ -78,10 +83,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 
 // edits the body of a page, formatted in html
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
-    row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
-    p := new(Page)
-    err := row.Scan(&p.Title, &p.Body)
-    p.Title = strings.Trim(p.Title, " ")
+    p, err := selectRow(title)
     if err == sql.ErrNoRows {
         _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", title, "")
         if err1 != nil {
@@ -97,7 +99,6 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 // saves edits made to a page and redirects to /view/ page
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
     body := r.FormValue("body")
-    fmt.Printf("body: %v\n", body)
     p := &Page{Title: title, Body: body}
     _, err := db.Exec("UPDATE pages SET body = $1 WHERE title = $2", p.Body, p.Title)
     if err != nil {
