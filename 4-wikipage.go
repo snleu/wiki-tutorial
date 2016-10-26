@@ -8,7 +8,6 @@ import (
     "regexp"
     "log"
     "strings"
-    //"fmt"
 )
 
 // parses all templates
@@ -58,17 +57,11 @@ func makeHandler(fn func (http.ResponseWriter, *http.Request, string)) http.Hand
     }
 }
 
-func selectRow(title string) (*Page, error) {
+func selectRow(title string, w http.ResponseWriter, r *http.Request) (*Page) {
     row := db.QueryRow("SELECT * FROM pages WHERE title = $1", title)
     p := new(Page)
     err := row.Scan(&p.Title, &p.Body)
     p.Title = strings.Trim(p.Title, " ")
-    return p, err
-}
-
-// calls the title and body, and formats it in html to view the page
-func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
-    p, err := selectRow(title)
     if err == sql.ErrNoRows {
         _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", title, "")
         if err1 != nil {
@@ -78,21 +71,18 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
     } else if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
     }
+    return p
+}
+
+// calls the title and body, and formats it in html to view the page
+func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
+    p := selectRow(title, w, r)
     renderTemplate(w, "view", p)
 }
 
 // edits the body of a page, formatted in html
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
-    p, err := selectRow(title)
-    if err == sql.ErrNoRows {
-        _, err1 := db.Exec("INSERT INTO pages VALUES($1, $2)", title, "")
-        if err1 != nil {
-            http.Error(w, err1.Error(), http.StatusInternalServerError)
-        }
-        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
-    } else if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-    }
+    p := selectRow(title, w, r)
     renderTemplate(w, "edit", p)
 }
 
